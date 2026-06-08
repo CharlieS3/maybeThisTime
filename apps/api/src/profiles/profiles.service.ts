@@ -8,6 +8,7 @@ export class ProfilesService {
 
     constructor(private readonly databaseService: DatabaseService) {}
     
+    // http://localhost:3000/profiles
     async findAll() {
         const result = await this.databaseService.query('SELECT * FROM profiles');
 

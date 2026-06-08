@@ -1,9 +1,13 @@
 // Simple file to add some data
 
 import dotenv from "dotenv";
+import path from "node:path";
 import { Client } from "pg";
 
-dotenv.config();
+// We have a global .env so we need to specify
+dotenv.config({
+  path: path.resolve(process.cwd(), "../../.env"),
+});
 
 const nameGiven = "please work"
 
@@ -37,5 +41,5 @@ async function main() {
 main();
 
 // To run the code:
-// From: C://Users//Charl//Desktop//brewery//Code//packages//database
+// From: cd C://Users//Charl//Desktop//brewery//Code//packages//database
 // Run: npx tsx src/seed.ts
