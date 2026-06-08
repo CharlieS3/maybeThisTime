@@ -1,0 +1,11 @@
+### For committing and working on project ###
+git status                       - see what has changed
+git add .                        - stage all changes
+git commit -m "msg abt changes"  - saves the locally in git history
+git push                         - saves changes to github 
+
+
+
+### Other helpful commands ###
+git log --oneline     - To view old versions
+git status            - see what has been done 

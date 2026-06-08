@@ -1,0 +1,23 @@
+code/
+  apps/
+    web/        # Next.js frontend
+    api/        # NestJS backend
+
+  packages/
+    database/         # Using raw SQL (Prisma schema/client later maybe)
+    shared/     # shared types/utils (IGNORE TO START)
+
+
+1. PostgreSQL
+The actual database that stores the data.
+
+2. Prisma
+The tool/code layer that defines the database tables and talks to PostgreSQL.
+
+3. NestJS
+The backend API that your frontend calls.
+
+Next.js frontend
+→ calls NestJS API
+→ NestJS uses Prisma
+→ Prisma reads/writes PostgreSQL

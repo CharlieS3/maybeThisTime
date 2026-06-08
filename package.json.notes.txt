@@ -1,0 +1,3 @@
+@types/pg     TypeScript types for pg
+tsx           lets you run .ts files directly
+typescript    TypeScript itself
