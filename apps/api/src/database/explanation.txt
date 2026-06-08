@@ -1,0 +1,5 @@
+This folder is where NestJS keeps the database conneciton code.
+
+It may grow but for now all we are worried about is:
+
+database.service.ts = talks to Postgres
