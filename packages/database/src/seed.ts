@@ -37,5 +37,5 @@ async function main() {
 main();
 
 // To run the code:
-// From: C:\Users\Chan\Desktop\lol\Code\packages\database
+// From: C://Users//Charl//Desktop//brewery//Code//packages//database
 // Run: npx tsx src/seed.ts
