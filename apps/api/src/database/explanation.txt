@@ -3,3 +3,46 @@ This folder is where NestJS keeps the database conneciton code.
 It may grow but for now all we are worried about is:
 
 database.service.ts = talks to Postgres
+
+
+Structure:
+
+database.module.ts is the sign-up sheet.
+- It tells NestJS: “This app has a database tool available.”
+
+database.service.ts is the actual tool.
+- It does the real work: “Connect to PostgreSQL and run queries.”
+
+So:
+
+database.module.ts
+  = makes database.service.ts available
+
+database.service.ts
+  = actually talks to PostgreSQL
+
+Then for profiles:
+
+profiles.module.ts
+  = asks for access to the database tool
+
+profiles.service.ts
+  = actually uses the database tool
+
+
+
+So the full idea is:
+
+- profiles.module.ts asks for DatabaseModule (the class)
+- DatabaseModule gives access to DatabaseService (the class)
+- profiles.service.ts uses DatabaseService
+- DatabaseService talks to PostgreSQL
+
+
+SO:
+
+profiles.service.ts will use database.service.ts directly.
+
+But it is only allowed to do that because:
+
+profiles.module.ts imported database.module.ts.

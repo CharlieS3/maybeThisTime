@@ -1,4 +1,6 @@
 /*
+This is our one shared database access tool.
+
 DatabaseService handles:
 "how to send a query to PostgreSQL"
 

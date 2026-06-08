@@ -5,7 +5,7 @@ import { Client } from "pg";
 
 dotenv.config();
 
-const nameGiven = "Bruh"
+const nameGiven = "please work"
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -22,7 +22,7 @@ async function main() {
   // constructed the table in our sql file.
   const result = await client.query(
     `
-    INSERT INTO users (first_name)
+    INSERT INTO profiles (first_name)
     VALUES ($1)
     RETURNING *;
     `, // RETURNING * means after insertion return the full row back

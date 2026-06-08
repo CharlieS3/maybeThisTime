@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { CreateProfileDto } from './dto/create-profile.dto';
+import { DatabaseService } from 'src/database/database.service';
 
 // injectable to means when this file is imported we can use a new or already created instance
 @Injectable()
 export class ProfilesService {
+
+    constructor(private readonly databaseService: DatabaseService) {}
     
-    findAll(){
-        return 0;
+    async findAll() {
+        const result = await this.databaseService.query('SELECT * FROM profiles');
+
+        return result.rows;
     }
 
     createProfile(createProfileDto: CreateProfileDto){
