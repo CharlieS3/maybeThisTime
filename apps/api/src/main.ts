@@ -7,4 +7,7 @@ async function bootstrap() {
 }
 bootstrap();
 
+// cd apps/api
+// npm run start:dev
+
 // http://localhost:3000
