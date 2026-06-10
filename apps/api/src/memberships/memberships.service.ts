@@ -6,11 +6,21 @@ import { CreateMembershipDto } from './dto/create-membership.dto';
 export class MembershipsService {
   constructor(private readonly db: DatabaseService) {}
 
+
+  // m, p, b are table nicknames (aliases). Each JOIN ... ON says "for every membership row, 
+  // find the profile/brewery row whose id matches, and let me select its columns too."
   async findAll() {
     const result = await this.db.query(
-      `SELECT profile_id AS "profileId", brewery_id AS "breweryId", role
-       FROM memberships`,
-    );
+        `SELECT
+          m.profile_id  AS "profileId",
+          p.first_name  AS "firstName",
+          m.brewery_id  AS "breweryId",
+          b.name        AS "breweryName",
+          m.role
+        FROM memberships m
+        JOIN profiles  p ON p.id = m.profile_id
+        JOIN breweries b ON b.id = m.brewery_id`,
+      );
     return result.rows;
   }
 

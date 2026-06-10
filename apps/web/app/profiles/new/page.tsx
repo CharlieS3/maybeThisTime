@@ -1,35 +1,51 @@
 /*
 To add a new profile.
+A profile must now belong to a brewery, so this form also asks
+WHICH brewery and WHAT role.
 */
 
-// "use client" means this component runs in the browser instead of on the server
 "use client";
 
-// useState is a React function. It returns (for example):
-//    firstName — the current value (starts as "")
-//    setFirstName — a function to change it
+// useEffect is a React function for running code at specific moments —
+// here: "when the page first loads" (to fetch the brewery list).
+import { useEffect, useState } from "react";
 
-import { useState } from "react";
+// A TypeScript type describing one brewery row from GET /breweries.
+type Brewery = { id: string; name: string };
 
 export default function NewProfilePage() {
   const [firstName, setFirstName] = useState("");
+  // The id of the brewery picked in the dropdown ("" = nothing picked yet).
+  const [breweryId, setBreweryId] = useState("");
+  // The role picked in the dropdown. Defaults to STAFF.
+  const [role, setRole] = useState("STAFF");
+  // The list of breweries to show in the dropdown. Starts empty,
+  // gets filled by the fetch below.
+  const [breweries, setBreweries] = useState<Brewery[]>([]);
   const [message, setMessage] = useState("");
 
+  // useEffect(fn, []) — run fn once, right after the page first renders.
+  // The empty array [] means "no dependencies → never run it again."
+  // Without it, the fetch would run on EVERY re-render (every keystroke!).
+  useEffect(() => {
+    async function loadBreweries() {
+      const res = await fetch("http://localhost:3000/breweries");
+      const data = await res.json();
+      setBreweries(data); // triggers a re-render; dropdown now has options
+    }
+    loadBreweries();
+  }, []);
+
   async function handleSubmit() {
-    // fetch(...) — the browser sends an HTTP request to the NestJS API. await pauses here until the response arrives.
-    // method: "Post" tells use where to to route to in Nest
-    // headers: {...} — tells the server "the body is JSON." NestJS uses this to know it should parse the body the DTO
     const res = await fetch("http://localhost:3000/profiles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ firstName: firstName }), //  JSON.stringify converts the object into a JSON string ({"firstName":"Bob"}) — HTTP bodies are text, not JS objects.
+      // Shorthand: { firstName } is the same as { firstName: firstName }
+      body: JSON.stringify({ firstName, breweryId, role }),
     });
 
-    // reads the response body and parses it from JSON string back into an object. This is the row your service returned via RETURNING
     const created = await res.json();
-    setMessage(`Created profile: ${created.firstName}`);
-
-    //clears the state, which empties the input box
+    setMessage(`Created profile: ${created.firstName} (${created.role})`);
     setFirstName("");
   }
 
@@ -38,12 +54,35 @@ export default function NewProfilePage() {
       <h1>New Profile</h1>
       <input
         value={firstName}
-        //onChange={...} — "run this function every time the input's content changes" (each keystroke)
-        // (e) => ... — an arrow function; e is the event object React hands you, describing what happened.
-        // e.target.value — whatever text is currently in that input.
         onChange={(e) => setFirstName(e.target.value)}
-        placeholder="First name" //What shows up when no name is entered
+        placeholder="First name"
       />
+
+      {/* Brewery dropdown. Works like the input: value + onChange. */}
+      <select value={breweryId} onChange={(e) => setBreweryId(e.target.value)}>
+        {/* Disabled placeholder so the user must actively choose */}
+        <option value="" disabled>
+          Pick a brewery
+        </option>
+        {/* .map turns each brewery object into an <option>.
+            key — React needs a unique id per item in a list.
+            value={b.id} — what gets stored in state (the UUID).
+            {b.name} — what the user sees. */}
+        {breweries.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+
+      {/* Role dropdown — fixed options matching the DB CHECK constraint */}
+      <select value={role} onChange={(e) => setRole(e.target.value)}>
+        <option value="OWNER">Owner</option>
+        <option value="ADMIN">Admin</option>
+        <option value="BREWER">Brewer</option>
+        <option value="STAFF">Staff</option>
+      </select>
+
       <button onClick={handleSubmit}>Create</button>
       <p>{message}</p>
     </div>

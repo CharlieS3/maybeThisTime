@@ -20,4 +20,6 @@ export class MembershipsController {
 
 
 // Need to be using real profile and brewery ID.
-// curl.exe -X POST http://localhost:3000/memberships -H "Content-Type: application/json" -d "{\"profileId\": \"<e047707e-50c9-4ef2-9b20-bba89b541d1f>\", \"breweryId\": \"<8df8d879-dd2f-4321-a2ab-c99027ba6253>\", \"role\": \"owner\"}"
+// curl.exe -X POST http://localhost:3000/memberships -H "Content-Type: application/json" -d "{\"profileId\": \"e047707e-50c9-4ef2-9b20-bba89b541d1f\", \"breweryId\": \"8df8d879-dd2f-4321-a2ab-c99027ba6253\", \"role\": \"owner\"}"
+
+// curl.exe -X POST http://localhost:3000/profiles -H "Content-Type: application/json" -d "{\"firstName\": \"Alice\", \"breweryId\": \"8df8d879-dd2f-4321-a2ab-c99027ba6253\", \"role\": \"brewer\"}"
