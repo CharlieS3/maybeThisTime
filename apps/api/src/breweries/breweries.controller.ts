@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { BreweriesService } from './breweries.service';
+import { CreateBreweryDto } from './dto/create-brewery.dto';
 
 @Controller('breweries')
 export class BreweriesController {
@@ -9,6 +10,11 @@ export class BreweriesController {
     @Get()
     findAllBreweries() {
         return this.breweriesService.findAll();
+    }
+
+    @Post()
+    create(@Body() dto: CreateBreweryDto) {
+        return this.breweriesService.create(dto);
     }
 }
 

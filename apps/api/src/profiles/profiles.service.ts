@@ -18,12 +18,12 @@ export class ProfilesService {
 
     // RETURNING gives back the new row (aliased to camelCase
     // Create a new Profile
-    async create(firstName: string) {
+    async create(dto: CreateProfileDto) {
         const result = await this.databaseService.query(
             `INSERT INTO profiles (first_name)
             VALUES ($1)
             RETURNING id, first_name AS "firstName"`,
-            [firstName]
+            [dto.firstName]
         );
         return result.rows[0];
     }

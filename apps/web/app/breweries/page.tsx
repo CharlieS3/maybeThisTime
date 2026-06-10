@@ -18,5 +18,6 @@ export default async function BreweriesPage() {
   );
 }
 
+// Run from apps/web
 // npm run dev
 // http://localhost:3001/breweries

@@ -17,8 +17,8 @@ export class ProfilesController {
     }
 
     @Post()
-    createProfile(@Body() createProfileDto: CreateProfileDto) {
-        return this.profileServices.create(createProfileDto.firstName);
+    createProfile(@Body() dto: CreateProfileDto) {
+        return this.profileServices.create(dto);
     }
 }
 
@@ -29,6 +29,9 @@ Running Code:
 
 Adding a user (Can be in any folder):
 curl.exe -X POST http://localhost:3000/profiles -H "Content-Type: application/json" -d "{\"firstName\":\"New Test\"}"
+
+Adding a brewery:
+
 
 
 
