@@ -1,8 +1,24 @@
-export default function ProfilesPage() {
+type Profile = {
+  id: string;
+  first_name: string;
+};
+
+export default async function ProfilesPage() {
+  const res = await fetch("http://localhost:3000/profiles", {
+    cache: "no-store",
+  });
+  const profiles: Profile[] = await res.json();
+
   return (
-    <main>
-      <h1>Profiles</h1>
-      <p>This page will show profiles from the API.</p>
-    </main>
+    <ul>
+      {profiles.map((p) => (
+        <li key={p.id}>{p.first_name}</li>
+      ))}
+    </ul>
   );
 }
+
+// Run in apps/web
+// npm run dev
+
+// http://localhost:3001/profiles
