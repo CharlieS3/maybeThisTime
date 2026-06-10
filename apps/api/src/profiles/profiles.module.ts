@@ -13,12 +13,3 @@ export class ProfilesModule {}
 
 // npm run start:dev
 // http://localhost:3000/profiles
-
-
-
-
-
-// 1. Add DatabaseModule
-// 2. Import it into ProfilesModule
-// 3. Inject DatabaseService into ProfilesService
-// 4. Run INSERT query from createProfile()

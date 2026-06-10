@@ -77,5 +77,5 @@ async function main() {
 main();
 
 // To run the code (MAKE SURE YOU RUN IT EXACTLY LIKE THIS):
-// From: C://Users//Charl//Desktop//brewery//Code//packages//database
+// From: cd C://Users//Charl//Desktop//brewery//Code//packages//database
 // Run: npx tsx src/migrate.ts

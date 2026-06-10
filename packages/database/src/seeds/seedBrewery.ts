@@ -6,7 +6,7 @@ import { Client } from "pg";
 
 // We have a global .env so we need to specify
 dotenv.config({
-  path: path.resolve(process.cwd(), "../../.env"),
+  path: path.resolve(process.cwd(), "../../.env"), //always run from packages/database
 });
 
 const nameGiven = "Brewery1"
