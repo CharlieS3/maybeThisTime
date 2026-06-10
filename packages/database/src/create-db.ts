@@ -3,13 +3,14 @@ This file needs to run on its own independently to create the db we will use.
 Then we can run migrate to create the table(s) and work from there.
 */
 
-
-const password = 'brewery_dev_123'
-
 // pg is s the PostgreSQL package for Node/TypeScript.
 // It lets your TypeScript code connect to PostgreSQL and run SQL.
 // Client is the object from pg that represents one connection to PostgreSQL
 import { Client } from "pg";
+import dotenv from "dotenv";
+import path from "node:path";
+
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 // name of our example database
 const DB_NAME = "my_app";
@@ -21,7 +22,7 @@ async function main() {
         host: "localhost",
         port: 5432,
         user: "postgres",
-        password: password,
+        password: process.env.DB_PASSWORD,
         database: "postgres",
     });
 

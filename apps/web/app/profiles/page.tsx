@@ -1,3 +1,5 @@
+// type is simply describing the shape of the data we expect
+// data shapes → type (or interface); behavior + state you instantiate with new → class.
 type Profile = {
   id: string;
   first_name: string;
