@@ -2,7 +2,7 @@
 // data shapes → type (or interface); behavior + state you instantiate with new → class.
 type Profile = {
   id: string;
-  first_name: string;
+  firstName: string;
 };
 
 export default async function ProfilesPage() {
@@ -14,7 +14,7 @@ export default async function ProfilesPage() {
   return (
     <ul>
       {profiles.map((p) => (
-        <li key={p.id}>{p.first_name}</li>
+        <li key={p.id}>{p.firstName}</li>
       ))}
     </ul>
   );
