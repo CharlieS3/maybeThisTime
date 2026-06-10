@@ -1,78 +1,84 @@
-I am building a brewery management tool. Stack: Next.js frontend, NestJS backend, PostgreSQL database using raw SQL.
+# Brewery Management Tool — Session Handoff
 
-Important preference: go very slowly, one step at a time. Do not dump many steps at once.
+## How to work with me (important)
+- Go very slowly, **one step at a time**. Do not dump many steps at once.
+- Short answers preferred.
+- Explain concepts when I ask, line by line if requested.
 
-Current repo structure:
+## Stack
+- Frontend: Next.js 16.2.6 (App Router, TypeScript, ESLint, no Tailwind, no src dir, import alias `@/*`), runs at **http://localhost:3001** (`"dev": "next dev -p 3001"`).
+- Backend: NestJS at **http://localhost:3000**, started with `npm run start:dev` from `apps/api`.
+- Database: PostgreSQL on localhost:5432, database name `my_app`, raw SQL via `pg` (no ORM).
+- Node v22, Windows, commands run in cmd; curl is `curl.exe`.
 
-code/
+## Repo structure
+```
+Code/
+  .env                      # single shared env file at repo root
   apps/
-    web/        # Next.js frontend
-    api/        # NestJS backend
+    web/                    # Next.js frontend
+      app/profiles/page.tsx        # lists profiles (server component fetch)
+      app/profiles/new/page.tsx    # form to create profile ("use client", fetch POST)
+      app/breweries/page.tsx       # lists breweries (server component fetch)
+    api/                    # NestJS backend
+      src/main.ts                  # enableCors({ origin: 'http://localhost:3001' })
+      src/app.module.ts            # ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env'] })
+      src/database/                # DatabaseModule + DatabaseService (pg Pool, query(sql, values))
+      src/profiles/                # ProfilesModule, Controller, Service, dto/create-profile.dto.ts
+      src/breweries/               # BreweriesModule, Controller, Service, dto/create-brewery.dto.ts
   packages/
-    database/   # raw SQL migrations/seeds
-    shared/     # ignore for now
+    database/               # dev tooling, run with: npx tsx <file> FROM packages/database
+      migrations/
+        001_create_users_table.sql   # creates profiles table (filename mismatch known, accepted)
+        002_create_breweries_table.sql
+      src/create-db.ts      # creates my_app db; password from process.env.DB_PASSWORD
+      src/migrate.ts        # runs .sql files in order; tracks them in schema_migrations table
+      src/seeds/seedProfile.ts
+      src/seeds/seedBrewery.ts
+    shared/                 # ignore
+```
 
-Backend:
-- NestJS API is in apps/api
-- It runs on localhost:3000
-- GET http://localhost:3000/profiles works
-- It returns JSON from Postgres, currently like:
-  [
-    { id: "...", first_name: "Bruh" },
-    { id: "...", first_name: "please work" }
-  ]
-- POST /profiles exists but does not actually save yet. Ignore POST for now.
-- We only want to display existing profile data in Next.js first.
+## Environment
+- One `.env` at `Code/.env` (UTF-8). Contains `DATABASE_URL=postgres://postgres:<pw>@localhost:5432/my_app` and `DB_PASSWORD`.
+- `migrate.ts` loads it via `path.resolve(__dirname, "../../../.env")` (anchored to file).
+- Seeds load it via `path.resolve(process.cwd(), "../../.env")` (cwd-relative → must run from `packages/database`).
+- NestJS loads it via ConfigModule (see app.module.ts above).
 
-Backend files shown already:
+## Database schema (current)
+```sql
+profiles  (id UUID PK DEFAULT gen_random_uuid(), first_name TEXT NOT NULL)
+breweries (id UUID PK DEFAULT gen_random_uuid(), name TEXT NOT NULL)
+schema_migrations (filename TEXT PK, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())
+```
+- Migration runner skips files already recorded in `schema_migrations`; never edit applied migration files — add new numbered ones (ALTER TABLE etc.).
 
-main.ts currently:
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+## Conventions we settled on
+- **DB = snake_case, API/frontend = camelCase.** Translation happens in service-layer SQL via aliases: `SELECT id, first_name AS "firstName" FROM profiles` (double quotes required).
+- **Explicit column lists, no SELECT \*** (deliberate exposure of fields; security).
+- Parameterized queries always (`$1`, values array).
+- Clients never supply `id` — DB generates UUIDs. DTOs exclude id.
+- DTO properties use `!` (e.g. `firstName!: string;`).
+- Controller = HTTP only; Service = logic + SQL; only DatabaseService touches the pool.
+- Next.js: routes mirror screens, not actions (`/profiles`, `/profiles/new`; delete will be a button, not a page). Server components fetch for read pages; `"use client"` only where interactivity is needed.
+- INSERTs use `RETURNING id, ... AS "camelCase"` to send the created row back.
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(process.env.PORT ?? 3000);
-}
-bootstrap();
+## Working endpoints / pages (all verified)
+- GET  /profiles  → `[{ id, firstName }]`
+- POST /profiles  → body `{ "firstName": "..." }`, returns created row
+- GET  /breweries → `[{ id, name }]`
+- http://localhost:3001/profiles (list), /profiles/new (create form, works end to end), /breweries (list)
 
-profiles.controller.ts has:
-@Get()
-findAllProfiles() {
-  return this.profileServices.findAll();
-}
+## Known gaps / deliberately deferred
+- **No auth/authz yet.** Plan: login (sessions or JWT), role checks (admin/owner), tenancy scoping in SQL (`WHERE brewery_id = $1` from the authenticated user, never from client input).
+- No input validation (class-validator/ValidationPipe not set up).
+- No error handling in frontend fetches (happy path only).
+- POST /breweries not implemented yet; no /breweries/new page yet.
+- Default Nest spec files untouched (will need mock providers later).
+- packages/database has no npm scripts (declined for now; must run tsx from `packages/database`).
+- Seeds insert duplicates every run (accepted for now).
+- pgcrypto extension line may be unnecessary if Postgres ≥ 13 (gen_random_uuid is built in).
 
-profiles.service.ts has:
-async findAll() {
-  const result = await this.databaseService.query('SELECT * FROM profiles');
-  return result.rows;
-}
-
-Frontend:
-- Next.js app was created in apps/web
-- We pinned create-next-app to Next 16.2.6 because an earlier preview version caused SWC errors
-- Tailwind: No
-- TypeScript: Yes
-- ESLint: Yes
-- src directory: No
-- App Router: Yes
-- Turbopack: No
-- Import alias: Yes, @/*
-- React Compiler: No
-- AGENTS.md: No
-- Next dev server works at http://localhost:3001
-- package.json dev script was changed to:
-  "dev": "next dev -p 3001"
-
-Last confirmed:
-- http://localhost:3001 loads the default Next starter page.
-- We were about to create:
-  apps/web/app/profiles/page.tsx
-
-Next immediate goal:
-1. Create a basic /profiles page in Next.js.
-2. Confirm http://localhost:3001/profiles loads.
-3. Then enable CORS in NestJS for http://localhost:3001.
-4. Then fetch GET http://localhost:3000/profiles from the Next page and render profile names.
-
-Please continue from there. If you need more information to continue please let me know.
+## Next planned work (in order)
+1. Finish breweries slice: POST /breweries (DTO exists), then `/breweries/new` page — mirror the profiles pattern.
+2. Memberships: join table linking profiles ↔ breweries with a role column (e.g. `memberships (profile_id, brewery_id, role)`), then expose/display it.
+3. Then looking at making this part more robust, handling errors, auth, etc.  
