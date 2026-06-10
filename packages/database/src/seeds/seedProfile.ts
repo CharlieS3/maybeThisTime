@@ -42,4 +42,4 @@ main();
 
 // To run the code:
 // From: cd C://Users//Charl//Desktop//brewery//Code//packages//database
-// Run: npx tsx src/seed.ts
+// Run: npx tsx src/seeds/seedProfile.ts
