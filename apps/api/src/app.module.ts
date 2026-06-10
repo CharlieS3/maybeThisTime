@@ -34,13 +34,14 @@ import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
 import { ConfigModule } from '@nestjs/config';
 import { BreweriesModule } from './breweries/breweries.module';
+import { MembershipsModule } from './memberships/memberships.module';
 
 // We load .env in this file
 // ConfigModule.forRoot({ isGlobal: true }) reads apps/api/.env and makes DATABASE_URL available everywhere
 
 @Module({
   // ConfigModule: When NestJS starts, load environment variables from Code/.env. Make those values available globally across the app.
-  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env'] }), ProfilesModule, BreweriesModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env'] }), ProfilesModule, BreweriesModule, MembershipsModule],
   controllers: [AppController],
   providers: [AppService],
 })
