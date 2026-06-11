@@ -4,12 +4,13 @@
 - Go very slowly, **one step at a time**. Do not dump many steps at once.
 - Short answers preferred.
 - Explain concepts when I ask, line by line if requested.
+- I'm new to Next.js — when I ask for code files, include detailed line-by-line comments.
 
 ## Stack
 - Frontend: Next.js 16.2.6 (App Router, TypeScript, ESLint, no Tailwind, no src dir, import alias `@/*`), runs at **http://localhost:3001** (`"dev": "next dev -p 3001"`).
 - Backend: NestJS at **http://localhost:3000**, started with `npm run start:dev` from `apps/api`.
 - Database: PostgreSQL on localhost:5432, database name `my_app`, raw SQL via `pg` (no ORM).
-- Node v22, Windows, commands run in cmd; curl is `curl.exe`.
+- Node v22, Windows, commands run in cmd; curl is `curl.exe` (watch out: cmd treats `<` `>` as redirection — never paste placeholders with angle brackets).
 
 ## Repo structure
 ```
@@ -18,24 +19,27 @@ Code/
   apps/
     web/                    # Next.js frontend
       app/profiles/page.tsx        # lists profiles (server component fetch)
-      app/profiles/new/page.tsx    # form to create profile ("use client", fetch POST)
+      app/profiles/new/page.tsx    # create form: name + brewery dropdown + role dropdown
       app/breweries/page.tsx       # lists breweries (server component fetch)
-    api/                    # NestJS backend
+      app/breweries/new/page.tsx   # form to create brewery ("use client", fetch POST)
+  api/                    # NestJS backend
       src/main.ts                  # enableCors({ origin: 'http://localhost:3001' })
       src/app.module.ts            # ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env'] })
-      src/database/                # DatabaseModule + DatabaseService (pg Pool, query(sql, values))
+      src/database/                # DatabaseModule + DatabaseService (pg Pool, query(), transaction())
       src/profiles/                # ProfilesModule, Controller, Service, dto/create-profile.dto.ts
       src/breweries/               # BreweriesModule, Controller, Service, dto/create-brewery.dto.ts
+      src/memberships/             # MembershipsModule, Controller, Service, dto/create-membership.dto.ts
   packages/
     database/               # dev tooling, run with: npx tsx <file> FROM packages/database
       migrations/
-        001_create_users_table.sql   # creates profiles table (filename mismatch known, accepted)
+        001_create_users_table.sql      # creates profiles table (filename mismatch known, accepted)
         002_create_breweries_table.sql
+        003_create_memberships_table.sql
       src/create-db.ts      # creates my_app db; password from process.env.DB_PASSWORD
       src/migrate.ts        # runs .sql files in order; tracks them in schema_migrations table
       src/seeds/seedProfile.ts
       src/seeds/seedBrewery.ts
-    shared/                 # ignore
+  shared/                 # ignore
 ```
 
 ## Environment
@@ -48,37 +52,60 @@ Code/
 ```sql
 profiles  (id UUID PK DEFAULT gen_random_uuid(), first_name TEXT NOT NULL)
 breweries (id UUID PK DEFAULT gen_random_uuid(), name TEXT NOT NULL)
+memberships (
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  brewery_id UUID NOT NULL REFERENCES breweries(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('OWNER', 'ADMIN', 'BREWER', 'STAFF')),
+  PRIMARY KEY (profile_id, brewery_id)
+)
 schema_migrations (filename TEXT PK, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())
 ```
 - Migration runner skips files already recorded in `schema_migrations`; never edit applied migration files — add new numbered ones (ALTER TABLE etc.).
+- Roles are stored UPPERCASE; CHECK is case-sensitive. Services normalize with `dto.role.toUpperCase()` before INSERT.
+- Composite PK on memberships = same person can't join the same brewery twice, but CAN belong to multiple breweries (possibly with different roles).
+
+## Business rules we adopted
+- **A brewery can exist on its own; a profile cannot.** Every profile must be created with a brewery + role. Enforced in the service layer (not the DB): `ProfilesService.create` inserts profile + membership in **one DB transaction** (all-or-nothing; bad breweryId rolls back the profile too). Old brewery-less profiles were deleted.
+- **Normalization:** names live only in profiles/breweries; memberships stores only ids + role. Names are assembled via JOIN when needed (see GET /memberships).
 
 ## Conventions we settled on
 - **DB = snake_case, API/frontend = camelCase.** Translation happens in service-layer SQL via aliases: `SELECT id, first_name AS "firstName" FROM profiles` (double quotes required).
 - **Explicit column lists, no SELECT \*** (deliberate exposure of fields; security).
 - Parameterized queries always (`$1`, values array).
 - Clients never supply `id` — DB generates UUIDs. DTOs exclude id.
-- DTO properties use `!` (e.g. `firstName!: string;`).
+- DTO properties use `!` (e.g. `firstName!: string;`). Controllers pass the whole DTO to services (settled this session).
 - Controller = HTTP only; Service = logic + SQL; only DatabaseService touches the pool.
-- Next.js: routes mirror screens, not actions (`/profiles`, `/profiles/new`; delete will be a button, not a page). Server components fetch for read pages; `"use client"` only where interactivity is needed.
+- DatabaseService now has two methods: `query(sql, values)` for single queries, and `transaction(fn)` for all-or-nothing groups — checks out one PoolClient, BEGIN → fn(client) → COMMIT, ROLLBACK on error, release in finally. Inside a transaction callback, always use `client.query`, never `this.db.query`.
+- Next.js: routes mirror screens, not actions (`/profiles`, `/profiles/new`; delete will be a button, not a page). Server components fetch for read pages; `"use client"` only where interactivity is needed. `/profiles/new` uses `useEffect(..., [])` to load the brewery dropdown once on mount.
 - INSERTs use `RETURNING id, ... AS "camelCase"` to send the created row back.
+- New modules generated with `npx nest g module|controller|service <name>` from `apps/api`.
+
+## DTOs (current shapes)
+- CreateProfileDto: `firstName`, `breweryId`, `role`
+- CreateBreweryDto: `name`
+- CreateMembershipDto: `profileId`, `breweryId`, `role`
 
 ## Working endpoints / pages (all verified)
-- GET  /profiles  → `[{ id, firstName }]`
-- POST /profiles  → body `{ "firstName": "..." }`, returns created row
-- GET  /breweries → `[{ id, name }]`
-- http://localhost:3001/profiles (list), /profiles/new (create form, works end to end), /breweries (list)
+- GET  /profiles    → `[{ id, firstName }]`
+- POST /profiles    → body `{ firstName, breweryId, role }`; transaction creates profile + membership; returns `{ id, firstName, breweryId, role }`
+- GET  /breweries   → `[{ id, name }]`
+- POST /breweries   → body `{ name }`, returns created row
+- GET  /memberships → JOINs profiles + breweries → `[{ profileId, firstName, breweryId, breweryName, role }]`
+- POST /memberships → body `{ profileId, breweryId, role }` (adds an existing profile to another brewery)
+- Pages: /profiles, /profiles/new (name + brewery dropdown + role dropdown, works end to end), /breweries, /breweries/new
 
 ## Known gaps / deliberately deferred
-- **No auth/authz yet.** Plan: login (sessions or JWT), role checks (admin/owner), tenancy scoping in SQL (`WHERE brewery_id = $1` from the authenticated user, never from client input).
-- No input validation (class-validator/ValidationPipe not set up).
-- No error handling in frontend fetches (happy path only).
-- POST /breweries not implemented yet; no /breweries/new page yet.
+- **No auth/authz yet.** Plan: login (sessions or JWT), role checks using memberships.role, tenancy scoping in SQL (`WHERE brewery_id = $1` from the authenticated user, never from client input).
+- No input validation (class-validator/ValidationPipe not set up). E.g. empty names accepted; bad role reaches the DB and 500s instead of a clean 400.
+- No error handling anywhere: frontend fetches are happy-path only; API lets DB errors (FK violations, duplicate membership PK, CHECK failures) surface as 500s.
+- No /memberships page in the frontend yet (data only visible via curl/DB tool).
+- **seedProfile.ts now violates the "profile must have a brewery" rule** (inserts a bare profile) — needs updating or retiring.
 - Default Nest spec files untouched (will need mock providers later).
 - packages/database has no npm scripts (declined for now; must run tsx from `packages/database`).
 - Seeds insert duplicates every run (accepted for now).
 - pgcrypto extension line may be unnecessary if Postgres ≥ 13 (gen_random_uuid is built in).
 
 ## Next planned work (in order)
-1. Finish breweries slice: POST /breweries (DTO exists), then `/breweries/new` page — mirror the profiles pattern.
-2. Memberships: join table linking profiles ↔ breweries with a role column (e.g. `memberships (profile_id, brewery_id, role)`), then expose/display it.
-3. Then looking at making this part more robust, handling errors, auth, etc.  
+1. `/memberships` page in Next.js — display the JOINed data (pure repetition of known patterns).
+2. Hardening pass: class-validator + ValidationPipe in Nest (reject empty/invalid input with 400s), map DB errors to proper HTTP errors, frontend fetch error handling (show failures instead of assuming success).
+3. Then auth: login, role checks (memberships.role), tenancy scoping — groundwork from steps 1–2 feeds into this.
