@@ -45,7 +45,7 @@ export default function NewBreweryPage() {
 
       // Only reached on 2xx: safe to read the created row.
       const created = await res.json();
-      setMessage(`Created brewery: ${created.name}`);
+      setMessage(`Created brewery: ${created.name} — code: ${created.code}`);
       setName("");
     } catch {
       // No response at all (server unreachable, network error).

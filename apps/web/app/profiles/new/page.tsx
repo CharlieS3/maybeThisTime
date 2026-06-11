@@ -15,6 +15,13 @@ type Brewery = { id: string; name: string };
 
 export default function NewProfilePage() {
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   // The id of the brewery picked in the dropdown ("" = nothing picked yet).
   const [breweryId, setBreweryId] = useState("");
   // The role picked in the dropdown. Defaults to STAFF.
@@ -38,6 +45,12 @@ export default function NewProfilePage() {
   }, []);
 
   async function handleSubmit() {
+    // Pure client-side check — no point sending a request we know is wrong.
+    if (password !== confirmPassword) {
+      setMessage("Error: passwords do not match");
+      return;
+    }
+
     // try/catch handles the case where the request itself fails
     // (API down, no network) — fetch throws, it never gets a response.
     try {
@@ -46,7 +59,16 @@ export default function NewProfilePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Shorthand: { firstName } is the same as { firstName: firstName }.
-        body: JSON.stringify({ firstName, breweryId, role }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          username,
+          email,
+          password,
+          phone: phone || undefined,
+          breweryId,
+          role,
+        }),
       });
 
       // fetch does NOT throw on 400/409/500 — a response arrived, so to
@@ -66,8 +88,18 @@ export default function NewProfilePage() {
 
       // Only reached on 2xx: safe to read the created row.
       const created = await res.json();
-      setMessage(`Created profile: ${created.firstName} (${created.role})`);
+      setMessage(
+        `Created profile: ${created.firstName} ${created.lastName} with username: ${created.username} (${created.role})`,
+      );
+
+      //  after a profile is successfully created, set every field's state back to ""
       setFirstName("");
+      setLastName("");
+      setUsername("");
+      setEmail("");
+      setPhone("");
+      setPassword("");
+      setConfirmPassword("");
     } catch {
       // No response at all (server unreachable, network error).
       setMessage("Error: could not reach the server. Is the API running?");
@@ -81,6 +113,38 @@ export default function NewProfilePage() {
         value={firstName}
         onChange={(e) => setFirstName(e.target.value)}
         placeholder="First name"
+      />
+      <input
+        value={lastName}
+        onChange={(e) => setLastName(e.target.value)}
+        placeholder="Last name"
+      />
+      <input
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder="Username"
+      />
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+      <input
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="Phone (optional)"
+      />
+      <input
+        type="password" // this masks the characters (dots shown), and disables some default browser functions that could compromise the password
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+      />
+      <input
+        type="password" // this masks the characters (dots shown), and disables some default browser functions that could compromise the password
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        placeholder="Confirm Password"
       />
 
       {/* Brewery dropdown. Works like the input: value + onChange. */}

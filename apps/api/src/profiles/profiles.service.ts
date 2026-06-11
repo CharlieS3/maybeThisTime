@@ -1,3 +1,6 @@
+// argon2 = the hashing library. We only ever store what argon2.hash() returns.
+import * as argon2 from 'argon2';
+
 import { Injectable } from '@nestjs/common';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { DatabaseService } from 'src/database/database.service';
@@ -11,7 +14,13 @@ export class ProfilesService {
     // Find all Profiles
     async findAll() {
         const result = await this.databaseService.query(
-            'SELECT id, first_name AS "firstName" FROM profiles' //needs to be updated everytime we add new columns
+            `SELECT id,
+                    first_name AS "firstName",
+                    last_name  AS "lastName",
+                    username,
+                    email,
+                    phone
+             FROM profiles`,
         );
         return result.rows;
     }
@@ -19,15 +28,23 @@ export class ProfilesService {
     // RETURNING gives back the new row (aliased to camelCase
     // Create a new Profile
     async create(dto: CreateProfileDto) {
+        // Hash FIRST, outside the transaction — hashing is deliberately slow
+        // (that's its defense), so don't hold a DB connection open during it.
+        // The output string contains the algorithm, settings, salt and hash
+        // all in one — that whole string is what we store.
+        const passwordHash = await argon2.hash(dto.password);
+
         // Everything inside this callback is one all-or-nothing unit.
         return this.databaseService.transaction(async (client) => {
             // 1) Create the profile. Note: client.query, NOT this.db.query —
             //    we must stay on the transaction's dedicated connection.
             const profileResult = await client.query(
-                `INSERT INTO profiles (first_name)
-                VALUES ($1)
-                RETURNING id, first_name AS "firstName"`,
-                [dto.firstName],
+                `INSERT INTO profiles (first_name, last_name, username, email, phone, password_hash)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING id, first_name AS "firstName", last_name AS "lastName", username, email, phone`,
+                // dto.phone may be undefined (it's optional).
+                // `?? null` says: "if undefined, store NULL" — explicit is safer than implicit
+                [dto.firstName, dto.lastName, dto.username, dto.email, dto.phone ?? null, passwordHash],
             );
 
             // typescriptprofileResult.rows        // [ { id: "e047...", firstName: "Bob" } ]
@@ -52,3 +69,8 @@ export class ProfilesService {
 
 
 // http://localhost:3000/profiles
+
+
+// curl.exe -X POST http://localhost:3000/profiles -H "Content-Type: application/json" -d "{\"firstName\":\"Buddy\",\"lastName\":\"Smith\",\"username\":\"buddy342\",\"email\":\"buddsss@example.com\",\"phone\":\"0612345678\",\"breweryId\":\"8f430a10-04f3-4982-8942-fb2ba2856727\",\"role\":\"OWNER\"}"
+
+// curl.exe -X POST http://localhost:3000/profiles -H "Content-Type: application/json" -d "{\"firstName\":\"Anna\",\"lastName\":\"Brouwer\",\"username\":\"anna01\",\"email\":\"anna@example.com\",\"password\":\"correct horse battery\",\"breweryId\":\"8f430a10-04f3-4982-8942-fb2ba2856727\",\"role\":\"OWNER\"}"
