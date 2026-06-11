@@ -19,27 +19,38 @@ export default function NewBreweryPage() {
   const [message, setMessage] = useState("");
 
   async function handleSubmit() {
-    // fetch(...) — the browser sends an HTTP request to the NestJS API.
-    // await pauses here until the response arrives.
-    // method: "POST" — matches the @Post() handler in BreweriesController.
-    // headers: {...} — tells the server "the body is JSON." NestJS uses this
-    // to know it should parse the body into the DTO.
-    const res = await fetch("http://localhost:3000/breweries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // JSON.stringify converts the object into a JSON string ({"name":"Fat Tire"})
-      // — HTTP bodies are text, not JS objects.
-      body: JSON.stringify({ name: name }),
-    });
+    // try/catch handles the case where the request itself fails
+    // (API down, no network) — fetch throws, it never gets a response.
+    try {
+      const res = await fetch("http://localhost:3000/breweries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name }),
+      });
 
-    // Reads the response body and parses it from a JSON string back into an
-    // object. This is the row your service returned via RETURNING.
-    const created = await res.json();
-    setMessage(`Created brewery: ${created.name}`);
+      // fetch does NOT throw on 400/409/500 — a response arrived, so to
+      // fetch that's "success". We must check the status ourselves.
+      // res.ok is true only for 2xx statuses.
+      if (!res.ok) {
+        // Parse the error body our API sends ({ statusCode, message }).
+        const err = await res.json();
+        // ValidationPipe sends message as an ARRAY of strings;
+        // our filter sends a single string. Handle both.
+        const text = Array.isArray(err.message)
+          ? err.message.join(", ")
+          : err.message;
+        setMessage(`Error: ${text}`);
+        return; // stop here — don't clear the input, let the user fix it
+      }
 
-    // Clears the state, which empties the input box
-    // (the input shows whatever `name` is, see value={name} below).
-    setName("");
+      // Only reached on 2xx: safe to read the created row.
+      const created = await res.json();
+      setMessage(`Created brewery: ${created.name}`);
+      setName("");
+    } catch {
+      // No response at all (server unreachable, network error).
+      setMessage("Error: could not reach the server. Is the API running?");
+    }
   }
 
   return (

@@ -3,6 +3,13 @@
 Instead of try/catch in every service method, we write one global exception filter — same idea as the 
 global ValidationPipe, but for errors going out. It inspects the error code and translates it to the right HTTP response.
 
+ValidationPipe (request-level): checks the body in isolation — is it the right shape, right types, right format? 
+It can tell "not-a-uuid" is wrong, but it has no idea what's in your database.
+
+Exception filter (database-level): catches rules that can only be checked against current data — does this 
+brewery actually exist (FK)? Is this membership already taken (unique PK)? Postgres is the one enforcing these; the 
+filter just translates its rejections into honest HTTP answers (400/409) instead of a generic 500.
+
 */
 
 

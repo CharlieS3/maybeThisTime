@@ -26,7 +26,8 @@ export default function NewProfilePage() {
 
   // useEffect(fn, []) — run fn once, right after the page first renders.
   // The empty array [] means "no dependencies → never run it again."
-  // Without it, the fetch would run on EVERY re-render (every keystroke!).
+  // Lives at the TOP LEVEL of the component — hooks can't go inside
+  // regular functions like handleSubmit (a React rule).
   useEffect(() => {
     async function loadBreweries() {
       const res = await fetch("http://localhost:3000/breweries");
@@ -37,16 +38,40 @@ export default function NewProfilePage() {
   }, []);
 
   async function handleSubmit() {
-    const res = await fetch("http://localhost:3000/profiles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // Shorthand: { firstName } is the same as { firstName: firstName }
-      body: JSON.stringify({ firstName, breweryId, role }),
-    });
+    // try/catch handles the case where the request itself fails
+    // (API down, no network) — fetch throws, it never gets a response.
+    try {
+      // The POST that creates the profile
+      const res = await fetch("http://localhost:3000/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Shorthand: { firstName } is the same as { firstName: firstName }.
+        body: JSON.stringify({ firstName, breweryId, role }),
+      });
 
-    const created = await res.json();
-    setMessage(`Created profile: ${created.firstName} (${created.role})`);
-    setFirstName("");
+      // fetch does NOT throw on 400/409/500 — a response arrived, so to
+      // fetch that's "success". We must check the status ourselves.
+      // res.ok is true only for 2xx statuses.
+      if (!res.ok) {
+        // Parse the error body our API sends ({ statusCode, message }).
+        const err = await res.json();
+        // ValidationPipe sends message as an ARRAY of strings;
+        // our filter sends a single string. Handle both.
+        const text = Array.isArray(err.message)
+          ? err.message.join(", ")
+          : err.message;
+        setMessage(`Error: ${text}`);
+        return; // stop here — don't clear the input, let the user fix it
+      }
+
+      // Only reached on 2xx: safe to read the created row.
+      const created = await res.json();
+      setMessage(`Created profile: ${created.firstName} (${created.role})`);
+      setFirstName("");
+    } catch {
+      // No response at all (server unreachable, network error).
+      setMessage("Error: could not reach the server. Is the API running?");
+    }
   }
 
   return (

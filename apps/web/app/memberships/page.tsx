@@ -11,13 +11,28 @@ type Membership = {
 
 // async is allowed because this is a server component.
 export default async function MembershipsPage() {
-  // Fetch from the NestJS API; cache: "no-store" = always fresh data.
-  const res = await fetch("http://localhost:3000/memberships", {
-    cache: "no-store",
-  });
+  // Declared outside the try so it's still usable after it.
+  let memberships: Membership[];
 
-  // Parse the JSON body into our typed array.
-  const memberships: Membership[] = await res.json();
+  try {
+    const res = await fetch("http://localhost:3000/memberships", {
+      cache: "no-store",
+    });
+
+    // Same lesson as the forms: fetch doesn't throw on 500s.
+    // Throwing here jumps us into the catch block below.
+    if (!res.ok) throw new Error();
+
+    memberships = await res.json();
+  } catch {
+    // API down or returned an error: render a friendly page instead of crashing.
+    return (
+      <main>
+        <h1>Memberships</h1>
+        <p>Could not load memberships. Is the API running?</p>
+      </main>
+    );
+  }
 
   return (
     <main>
