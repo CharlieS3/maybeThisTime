@@ -1,9 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { DatabaseExceptionFilter } from './database/database-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Apply the filter to every route, app-wide (mirror of useGlobalPipes).
+  app.useGlobalFilters(new DatabaseExceptionFilter());
 
     // Apply validation to every incoming request body, app-wide.
   app.useGlobalPipes(
@@ -22,7 +26,6 @@ bootstrap();
 // cd apps/api
 // npm run start:dev
 // http://localhost:3000
-
 
 /*
 CORS Breakdown:
