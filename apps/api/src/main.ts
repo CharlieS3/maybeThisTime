@@ -1,8 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+    // Apply validation to every incoming request body, app-wide.
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,             // strip any properties not declared in the DTO
+      forbidNonWhitelisted: true,  // ...and reject the request (400) if extras are sent
+    }),
+  );
+
+
   app.enableCors({ origin: 'http://localhost:3001' });
   await app.listen(process.env.PORT ?? 3000);
 }
