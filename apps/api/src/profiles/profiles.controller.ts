@@ -1,7 +1,8 @@
 import { Controller, Get, Post, Body } from '@nestjs/common';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { ProfilesService } from './profiles.service';
-
+import { UseGuards } from '@nestjs/common';   // add to existing import
+import { SessionGuard } from 'src/auth/session.guard';
 @Controller('profiles')
 export class ProfilesController {
 
@@ -11,11 +12,13 @@ export class ProfilesController {
 
     // Find all profiles (only an admin should be able to do this)
     // Localhost:3000/profiles
+    @UseGuards(SessionGuard)
     @Get()
     findAllProfiles() {
         return this.profileServices.findAll();
     }
 
+    @UseGuards(SessionGuard)
     @Post()
     createProfile(@Body() dto: CreateProfileDto) {
         return this.profileServices.create(dto);

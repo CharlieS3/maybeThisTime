@@ -1,16 +1,19 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
+import { SessionGuard } from 'src/auth/session.guard';
 
 @Controller('memberships')
 export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
 
+  @UseGuards(SessionGuard)
   @Get()
   findAll() {
     return this.membershipsService.findAll();
   }
 
+  @UseGuards(SessionGuard)
   @Post()
   create(@Body() dto: CreateMembershipDto) {
     return this.membershipsService.create(dto);

@@ -77,4 +77,4 @@ export class AuthController {
 // curl.exe -i -X POST http://localhost:3000/auth/login -H "Content-Type: application/json" -d "{\"username\":\"Albert\",\"password\":\"password1234\"}"
 
 // Logout:
-// 
+// curl.exe -i -b cookies.txt -X POST http://localhost:3000/auth/logout

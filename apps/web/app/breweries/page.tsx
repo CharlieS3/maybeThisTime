@@ -1,3 +1,5 @@
+import { cookies } from "next/headers"; // top of file
+
 type Brewery = {
   id: string;
   name: string;
@@ -7,15 +9,18 @@ type Brewery = {
 export default async function BreweriesPage() {
   let breweries: Brewery[];
 
+  // Read the cookies that arrived WITH the page request.
+  // (async in Next 16 — must await)
+  const cookieStore = await cookies();
+
   try {
     const res = await fetch("http://localhost:3000/breweries", {
       cache: "no-store",
+      // Forward them to the API: relay, not creation.
+      headers: { Cookie: cookieStore.toString() },
     });
 
-    // Same lesson as the forms: fetch doesn't throw on 500s.
-    // Throwing here jumps us into the catch block below.
     if (!res.ok) throw new Error();
-
     breweries = await res.json();
   } catch {
     // API down or returned an error: render a friendly page instead of crashing.
