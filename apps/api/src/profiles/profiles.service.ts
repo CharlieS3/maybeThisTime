@@ -60,8 +60,19 @@ export class ProfilesService {
                 [profile.id, dto.breweryId, dto.role.toUpperCase()],
             );
 
+            const membership = membershipResult.rows[0];
+
             // Combine both rows into one response object.
-            return { ...profile, ...membershipResult.rows[0] };
+            return {
+                id: profile.id,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                username: profile.username,
+                email: profile.email,
+                phone: profile.phone,
+                breweryId: membership.breweryId,
+                role: membership.role,
+            };
         });
     }
 }

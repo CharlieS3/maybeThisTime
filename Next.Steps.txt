@@ -1,9 +1,0 @@
-Where we left is is the database and backend are connected. The find 
-all profiles works and the overall structure is solid. Check app.module
-for details.
-
-Experiment with db a bit. Make sure you understand everything and maybe
-try implemented the add profile and test that.
-
-Next or just move onto directly make a very simple front end with 
-Next js that displats all users so we have a working slice.

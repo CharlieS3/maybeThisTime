@@ -1,17 +1,18 @@
-# Brewery Management Tool — Session Handoff
+# Brewery Management Tool — Session Handoff (updated)
 
 ## How to work with me (important)
 - Go very slowly, **one step at a time**. Do not dump many steps at once.
 - Short answers preferred.
 - Explain concepts when I ask, line by line if requested.
 - I'm new to Next.js — when I ask for code files, include detailed line-by-line comments.
-- Workflow refinements we agreed on: scale step size to novelty (new concepts = tiny steps; settled patterns = whole files at once). I write first and Claude reviews where possible. Occasionally do cold reviews of whole modules.
+- Workflow refinements: scale step size to novelty (new concepts = tiny steps; settled patterns = whole files/snippets at once). I write first and Claude reviews where possible. Occasionally do cold reviews of whole modules.
+- Watch for my simple errors.
 
 ## Stack
 - Frontend: Next.js 16.2.6 (App Router, TypeScript, ESLint, no Tailwind, no src dir, import alias `@/*`), runs at **http://localhost:3001** (`"dev": "next dev -p 3001"`).
-- Backend: NestJS at **http://localhost:3000**, started with `npm run start:dev` from `apps/api`.
+- Backend: NestJS at **http://localhost:3000**, started with `npm run start:dev` from `apps/api`. Uses `argon2` (password hashing).
 - Database: PostgreSQL on localhost:5432, database name `my_app`, raw SQL via `pg` (no ORM).
-- Node v22, Windows, commands run in cmd; curl is `curl.exe` (watch out: cmd treats `<` `>` as redirection — never paste placeholders with angle brackets; also note: I once pasted a `PASTE-ID` placeholder literally — give explicit "fetch real id first" steps).
+- Node v22, Windows, commands run in cmd; curl is `curl.exe` (cmd treats `<` `>` as redirection — never paste placeholders with angle brackets; also give explicit "fetch the real id first" steps, placeholders get pasted literally).
 
 ## Repo structure
 ```
@@ -20,29 +21,32 @@ Code/
   apps/
     web/                    # Next.js frontend
       app/profiles/page.tsx        # lists profiles (server component fetch + error handling)
-      app/profiles/new/page.tsx    # create form: all profile fields + brewery & role dropdowns
-      app/breweries/page.tsx       # lists breweries incl. code (server component fetch + error handling)
-      app/breweries/new/page.tsx   # form to create brewery; success message shows generated code
-      app/memberships/page.tsx     # lists JOINed memberships (server component fetch + error handling)
+      app/profiles/new/page.tsx    # full create form incl. password + confirm password
+      app/breweries/page.tsx       # lists breweries incl. code (+ error handling)
+      app/breweries/new/page.tsx   # create form; success message shows generated code
+      app/memberships/page.tsx     # lists JOINed memberships (+ error handling)
   api/                    # NestJS backend
       src/main.ts                  # enableCors, global ValidationPipe, global DatabaseExceptionFilter
       src/app.module.ts            # ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env'] })
       src/database/                # DatabaseModule + DatabaseService (pg Pool, query(), transaction())
-                                   # + database-exception.filter.ts (NEW)
+                                   # + database-exception.filter.ts
       src/profiles/                # ProfilesModule, Controller, Service, dto/create-profile.dto.ts
       src/breweries/               # BreweriesModule, Controller, Service, dto/create-brewery.dto.ts
       src/memberships/             # MembershipsModule, Controller, Service, dto/create-membership.dto.ts
+      src/auth/                    # AuthModule, AuthController, AuthService, dto/login.dto.ts
   packages/
     database/               # dev tooling, run with: npx tsx <file> FROM packages/database
       migrations/
         001_create_users_table.sql      # creates profiles table (filename mismatch known, accepted)
         002_create_breweries_table.sql
         003_create_memberships_table.sql
-        004_add_profile_contact_fields.sql   # NEW: last_name, email, username, phone
-        005_add_brewery_code.sql             # NEW: code
+        004_add_profile_contact_fields.sql   # last_name, email, username, phone
+        005_add_brewery_code.sql             # code
+        006_add_profile_password.sql         # password_hash
+        007_create_sessions_table.sql        # NEW: sessions table (applied successfully)
       src/create-db.ts      # creates my_app db; password from process.env.DB_PASSWORD
       src/migrate.ts        # runs .sql files in order; tracks them in schema_migrations table
-      src/seeds/seedProfile.ts    # BROKEN: predates brewery rule AND new NOT NULL columns
+      src/seeds/seedProfile.ts    # BROKEN: predates brewery rule + new NOT NULL columns
       src/seeds/seedBrewery.ts    # BROKEN: predates NOT NULL code column
   shared/                 # ignore
 ```
@@ -57,16 +61,17 @@ Code/
 ```sql
 profiles (
   id UUID PK DEFAULT gen_random_uuid(),
-  first_name TEXT NOT NULL,
-  last_name  TEXT NOT NULL,
-  email      TEXT NOT NULL UNIQUE,
-  username   TEXT NOT NULL UNIQUE,   -- future login identifier
-  phone      TEXT                    -- nullable: optional
+  first_name    TEXT NOT NULL,
+  last_name     TEXT NOT NULL,
+  email         TEXT NOT NULL UNIQUE,
+  username      TEXT NOT NULL UNIQUE,   -- login identifier
+  phone         TEXT,                   -- nullable: optional
+  password_hash TEXT NOT NULL           -- argon2id hash; NEVER the password itself
 )
 breweries (
   id   UUID PK DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  code TEXT NOT NULL UNIQUE          -- server-generated 6-char join/login code
+  code TEXT NOT NULL UNIQUE             -- server-generated 6-char code
 )
 memberships (
   profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -74,70 +79,106 @@ memberships (
   role TEXT NOT NULL CHECK (role IN ('OWNER', 'ADMIN', 'BREWER', 'STAFF')),
   PRIMARY KEY (profile_id, brewery_id)
 )
+sessions (                              -- NEW (migration 007, applied)
+  id UUID PK DEFAULT gen_random_uuid(), -- the session ID itself; PK = fast lookup
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),  -- debugging/stats only
+  expires_at TIMESTAMPTZ NOT NULL       -- set by login code, not a table default
+)
 schema_migrations (filename TEXT PK, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())
 ```
-- Migration runner skips files already recorded in `schema_migrations`; never edit applied migration files — add new numbered ones.
-- Lesson learned this session: adding NOT NULL columns to a table with rows fails — we chose to delete dev rows first rather than use defaults or nullable columns.
-- Roles are stored UPPERCASE; CHECK is case-sensitive. Service normalizes with `dto.role.toUpperCase()`, and `@IsIn` now also rejects lowercase before it reaches the service.
-- Composite PK on memberships = same person can't join the same brewery twice, but CAN belong to multiple breweries (possibly with different roles).
+- Never edit applied migration files — add new numbered ones. Adding NOT NULL columns to a table with rows fails; in dev we delete the test rows first (done twice now).
+- Roles stored UPPERCASE; `@IsIn` rejects lowercase at the API, service also does `.toUpperCase()`.
+- Composite PK on memberships: can't join same brewery twice; CAN belong to multiple breweries with different roles.
+- Editor highlights `sessions` blue (SQL-keyword-ish highlighting); harmless, not reserved in Postgres.
 
-## Business rules we adopted
-- **A brewery can exist on its own; a profile cannot.** Every profile must be created with a brewery + role. Enforced in the service layer: `ProfilesService.create` inserts profile + membership in **one DB transaction**.
-- **Brewery codes are server-generated, never client-supplied** (same principle as IDs: unique/unguessable values are not the client's job). 6 chars from a 32-char alphabet (no 0/O/1/I — ambiguity), `crypto.randomInt` (not Math.random — codes are credential-adjacent). 32^6 ≈ 1B combinations; code is an identifier, the password (future) carries the security load.
-- **Normalization:** names live only in profiles/breweries; memberships stores only ids + role.
+## Business rules
+- **A brewery can exist on its own; a profile cannot.** `ProfilesService.create` inserts profile + membership in one DB transaction.
+- **Brewery codes are server-generated, never client-supplied.** 6 chars, 32-char alphabet (no 0/O/1/I), `crypto.randomInt`, retry up to 5x on 23505 collision. Code = identifier; the password carries the security load.
+- **Passwords:** argon2id (over bcrypt — OWASP first pick, memory-hard, no 72-byte truncation). Min length 12, max 128, NO composition rules (NIST/OWASP: length beats forced symbols; later add a common-password blocklist instead). Hash computed in service BEFORE/OUTSIDE the transaction. `password_hash` appears in NO RETURNING and NO SELECT — except the single lookup inside `AuthService.login` (needed there as the comparison target for `argon2.verify(hash, attempt)`); it never leaves the method.
+- **Future sensitive data**: passwords = hash (one-way); usable secrets like Square API tokens = encryption at rest or secret manager, NEVER hash; business data like inventory = protected by authz/tenancy, not crypto.
 
-## Validation layer (NEW this session)
-- `class-validator` + `class-transformer` installed in `apps/api`.
-- Global pipe in `main.ts`: `new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })` — strips undeclared properties and 400s if extras are sent.
-- Mental model we settled: **pipe = "is this request well-formed?" (checks body in isolation); DB constraints + exception filter = "does it make sense given current data?"** A request can pass the first and legitimately fail the second.
-- Decorators in use: `@IsString`, `@Length(min, max)`, `@IsUUID`, `@IsIn([...])`, `@IsEmail`, `@IsOptional`.
-- Gotchas learned:
-  - `@IsOptional` only skips `null`/`undefined`, NOT `""` — frontend must send `phone: phone || undefined`.
-  - `@IsString` is redundant under `@IsIn(strings)` or `@IsEmail` (kept off).
-  - `isUUID` (lowercase) is a function, `@IsUUID` is the decorator — casing matters.
-  - Each endpoint validates independently; never assume "another DTO already checked this."
+## Auth — sessions (THIS SESSION'S WORK)
+Concepts covered with me (I'm comfortable with these now):
+- HTTP is stateless → session = server-generated random ID stored in a `sessions` table + handed to browser as a cookie ("coat-check ticket" analogy).
+- Sessions intentionally SURVIVE browser close; two separate lifetimes: cookie lifetime (browser) vs `expires_at` (server row). Row is removed by logout (explicit DELETE) or treated dead by expiry check (`expires_at > now()` on lookup); old-row sweeping is cosmetic cleanup later.
+- httpOnly cookie = page JS can't read it (XSS), the core reason cookies were chosen over JWT-in-localStorage.
 
-## DB error mapping (NEW this session)
-- `src/database/database-exception.filter.ts`: `@Catch(DatabaseError)` (the class `pg` throws) — only DB errors enter it; ValidationPipe 400s etc. keep default handling.
-- Registered globally: `app.useGlobalFilters(new DatabaseExceptionFilter())`. Order vs pipes doesn't matter (pipes = inbound, filters = outbound).
-- Mapping: `23505` unique_violation → 409 "Resource already exists"; `23503` foreign_key_violation → 400 "Referenced resource does not exist"; default → clean 500 (no leaked details).
-- `BreweriesService.create` retries code generation up to 5x on 23505 (collision), rethrows anything else for the filter.
+Done and verified:
+1. Migration `007_create_sessions_table.sql` written by me, applied successfully.
+2. `AuthService.login` now, after password verify, runs:
+   `INSERT INTO sessions (profile_id, expires_at) VALUES ($1, now() + interval '7 days') RETURNING id`
+   (lesson learned: SQL expressions like `now() + interval` go IN the SQL string, only external values get `$n` params; column list needs parentheses)
+   → `const sessionId = sessionResult.rows[0].id;` → temporarily returned as `sessionId` in the JSON body.
+3. Verified with curl: login returns user + breweries + sessionId; row created. **7 days** chosen as session length (changeable).
 
-## Conventions we settled on
-- **DB = snake_case, API/frontend = camelCase.** Translation via SQL aliases: `last_name AS "lastName"` (double quotes required). Single-word columns (email, username, phone, code) need no alias.
-- **Explicit column lists, no SELECT \*.** Cost acknowledged: every new column means updating SELECTs/INSERTs — worth it.
-- Parameterized queries always (`$1`, values array). Optional values passed as `dto.phone ?? null` (explicit over implicit).
-- Clients never supply `id` or `code` — server/DB generates. DTOs exclude them.
-- DTO properties use `!` for required, `?` for optional (e.g. `phone?: string;` — `!` on an optional field is a lie to TypeScript).
-- Controller = HTTP only; Service = logic + SQL; only DatabaseService touches the pool. Inside a transaction callback, always `client.query`, never `this.db.query`.
-- Frontend fetch pattern (forms): try/catch (network failure) + `if (!res.ok)` (fetch does NOT throw on 4xx/5xx) + handle `err.message` as array (ValidationPipe) or string (filter). Error branch keeps inputs; success branch clears ALL field states.
-- Frontend fetch pattern (server-component list pages): `let data: T[];` + try/catch + `if (!res.ok) throw` + friendly fallback page in catch.
-- Types: `phone: string | null` (SQL NULL → JSON null). Property order never matters in objects/types; only positional things like `VALUES ($1, $2)` care about order.
-- Next.js: routes mirror screens, not actions. Server components for read pages; `"use client"` only where interactive. Hooks only at component top level (never inside handlers).
+IN PROGRESS — exactly where we stopped:
+4. Rewriting `AuthController.login` to move sessionId from JSON body into an httpOnly cookie. The planned method (Claude provided, heavily commented):
+   - `@Res({ passthrough: true }) res: Response` (passthrough = Nest still sends the return value; without it our `return` does nothing)
+   - `const { sessionId, ...user } = await this.authService.login(dto);`
+   - `res.cookie('session_id', sessionId, { httpOnly: true, sameSite: 'lax', maxAge: 7*24*60*60*1000 /* , secure: true in prod */ });`
+   - `return user;` (body no longer contains sessionId)
+   - imports: add `Res` to @nestjs/common import; `import type { Response } from 'express';`
+   - **CURRENT BLOCKER:** ts(2339) "Property 'cookie' does not exist on type 'Response'" — TypeScript resolving the built-in fetch `Response` instead of Express's. I was checking whether the `import type { Response } from 'express'` line is present; if it IS present, next suspect is the `@types/express` package. RESUME HERE.
+
+Login design (decided earlier, unchanged): **Option B** — login with username + password only; response includes the user's breweries (id, name, role); frontend lets them pick. Brewery `code` reserved for future "join a brewery" flow. Same vague "Invalid credentials" 401 for unknown user and wrong password (anti-enumeration); membership fetch AFTER both checks. LoginDto deliberately loose (`@IsString @IsNotEmpty` only) so old passwords keep working if signup rules tighten.
+
+NOT BUILT YET: cookie-parser middleware + CORS `credentials: true` + frontend `credentials: "include"`, logout endpoint, auth guard, login page in Next.js.
+
+## Validation layer
+- `class-validator` + `class-transformer`; global `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })` in main.ts.
+- Mental model: pipe = "is the request well-formed?" (in isolation); DB constraints + exception filter = "does it make sense against current data?".
+- Decorators in use: `@IsString`, `@Length`, `@IsUUID`, `@IsIn`, `@IsEmail`, `@IsOptional`, `@IsNotEmpty`.
+- Gotchas learned: `@IsOptional` skips only null/undefined, NOT "" (frontend sends `phone: phone || undefined`); `@IsString` redundant under `@IsIn(strings)`/`@IsEmail`; `isUUID` (function) vs `@IsUUID` (decorator); every endpoint validates independently.
+
+## DB error mapping
+- `src/database/database-exception.filter.ts`: `@Catch(DatabaseError)` (pg's error class) — DB errors only; everything else keeps default handling. Registered with `app.useGlobalFilters(...)`; order vs pipes irrelevant (pipes inbound, filters outbound).
+- 23505 unique_violation → 409 "Resource already exists"; 23503 foreign_key_violation → 400 "Referenced resource does not exist"; default → clean 500.
+
+## Conventions
+- DB = snake_case, API/frontend = camelCase; translate via SQL aliases `AS "camelCase"` (double quotes). Single-word columns need no alias.
+- Explicit column lists, no SELECT \* (this is the mechanism keeping password_hash from leaking).
+- Parameterized queries always; SQL-computed expressions (e.g. `now() + interval '7 days'`) written directly in the SQL string.
+- Optional values: `dto.phone ?? null`. Clients never supply `id` or `code`. DTO fields: `!` required, `?` optional.
+- Controller = HTTP only; Service = logic + SQL; only DatabaseService touches the pool. In transactions: `client.query`, never `this.db.query`.
+- Frontend form fetch pattern: try/catch + `if (!res.ok)` + err.message array-or-string; error branch keeps inputs, success branch clears ALL field states.
+- Server-component list pages: `let data: T[];` + try/catch + `if (!res.ok) throw` + friendly fallback return in catch.
+- Controlled inputs: `value={X}` and `onChange → setX` must reference the SAME state.
+- Confirm-password is frontend-only; checked at top of handleSubmit; never in the DTO.
+- `type="password"` on password inputs. Login is POST, never GET.
+- Types: `phone: string | null`. Key order never matters in objects/types; only positional `$1, $2` arrays care.
+- New modules: `npx nest g module|controller|service <name>` from `apps/api`; auth module imports DatabaseModule.
 
 ## DTOs (current shapes)
-- CreateProfileDto: `username` (@Length(4,25)), `firstName` (@Length(2,50)), `lastName` (@Length(2,50)), `email` (@IsEmail), `phone?` (@IsOptional @IsString @Length(6,12)), `breweryId` (@IsUUID), `role` (@IsIn)
-- CreateBreweryDto: `name` (@IsString @Length — check file for current min, we debated 3 vs 4)
-- CreateMembershipDto: `profileId` (@IsUUID), `breweryId` (@IsUUID), `role` (@IsIn)
+- CreateProfileDto: `username` @Length(4,25), `password` @Length(12,128), `firstName` @Length(2,50), `lastName` @Length(2,50), `email` @IsEmail, `phone?` @IsOptional @IsString @Length(6,15), `breweryId` @IsUUID, `role` @IsIn
+- CreateBreweryDto: `name` @IsString @Length (check file for current min — debated 3 vs 4)
+- CreateMembershipDto: `profileId` @IsUUID, `breweryId` @IsUUID, `role` @IsIn
+- LoginDto: `username` + `password`, both @IsString @IsNotEmpty only
 
 ## Working endpoints / pages (all verified)
-- GET  /profiles    → `[{ id, firstName, lastName, username, email, phone }]`
-- POST /profiles    → body `{ firstName, lastName, username, email, phone?, breweryId, role }`; transaction creates profile + membership
+- GET  /profiles    → `[{ id, firstName, lastName, username, email, phone }]` (never password_hash)
+- POST /profiles    → `{ firstName, lastName, username, email, password, phone?, breweryId, role }`; hashes password, transaction creates profile + membership
 - GET  /breweries   → `[{ id, name, code }]`
-- POST /breweries   → body `{ name }`; returns row incl. generated `code`
-- GET  /memberships → JOINs → `[{ profileId, firstName, breweryId, breweryName, role }]`
-- POST /memberships → body `{ profileId, breweryId, role }`
-- Pages: /profiles, /profiles/new (full form), /breweries, /breweries/new (shows code on success), /memberships — all with error handling
+- POST /breweries   → `{ name }`; returns row incl. generated code
+- GET  /memberships → `[{ profileId, firstName, breweryId, breweryName, role }]`
+- POST /memberships → `{ profileId, breweryId, role }`
+- POST /auth/login  → `{ username, password }` → 401 "Invalid credentials" or `{ id, username, firstName, lastName, breweries: [...], sessionId }` (sessionId in body is TEMPORARY — moving to cookie, see blocker)
+- Pages: /profiles, /profiles/new, /breweries, /breweries/new, /memberships — all with error handling
 
 ## Known gaps / deliberately deferred
-- **No auth/authz yet** (next major goal — see below).
-- **Trim transform deferred**: `"    "` passing @Length is known; fix = `@Transform(({value}) => ...trim())` + `transform: true` in ValidationPipe.
-- **Route param validation**: when `:id` endpoints arrive (e.g. DELETE), use `ParseUUIDPipe` — body validation doesn't cover params.
-- **Both seeds now broken** (violate brewery rule and/or new NOT NULL columns) — update or retire.
-- Filter's 409 message is generic ("Resource already exists") — could distinguish duplicate email vs username vs membership later via `err.constraint`.
-- Default Nest spec files untouched. packages/database has no npm scripts. pgcrypto line may be unnecessary on Postgres ≥ 13.
+- No rate limiting on /auth/login (brute-force protection) — add with sessions work.
+- No common-password blocklist (chosen over composition rules).
+- No cleanup job for expired session rows (cosmetic; expiry check at lookup is the security).
+- Trim transform deferred: whitespace-padded values pass @Length; fix = `@Transform` + `transform: true` in the pipe.
+- Route param validation (`ParseUUIDPipe`) when `:id` endpoints arrive.
+- Both seeds broken (predate new NOT NULL columns + brewery rule) — update or retire.
+- Filter's 409 is generic; could distinguish duplicate email/username/membership via `err.constraint`.
+- Default Nest spec files untouched. packages/database has no npm scripts. pgcrypto line may be unnecessary on Postgres ≥ 13 (also harmlessly repeated in 007).
 
-## Next planned work
-1. **Auth, password pass first**: add password to profiles (bcrypt hashing — never plain text, which is why we didn't add the column yet), then login.
-2. **Login design — OPEN DECISION**: Option A: sign in with brewery code + username + password (Slack-workspace style). Option B: username + password only, then choose brewery from your memberships (since profiles can belong to multiple breweries). Not decided yet.
-3. Then: sessions or JWT, role checks using memberships.role, tenancy scoping in SQL (`WHERE brewery_id = $1` from the authenticated user, never from client input), rate limiting on login.
+## Next planned work (in order)
+1. **Fix the Response type error** (see blocker above) and finish the cookie-setting controller.
+2. **Cookie plumbing**: cookie-parser in Nest + CORS `credentials: true` + frontend fetches with `credentials: "include"`.
+3. **Logout endpoint**: DELETE session row + clear cookie.
+4. **Auth guard**: read session_id cookie → look up sessions table (check `expires_at > now()`) → attach user to request → protect endpoints.
+5. **Login page** in Next.js (username + password form → on success show brewery picker per Option B).
+6. **Tenancy + roles**: scope queries `WHERE brewery_id = $1` from the SESSION's chosen brewery (never client input); role checks from memberships.role; rate limiting on login.

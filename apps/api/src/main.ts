@@ -2,9 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DatabaseExceptionFilter } from './database/database-exception.filter';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // this adds a pre-processing step that runs on every incoming request, before any controller
+  // we get a seession ID from this and can then determine if the user should be automatically logged in
+  app.use(cookieParser());
 
   // Apply the filter to every route, app-wide (mirror of useGlobalPipes).
   app.useGlobalFilters(new DatabaseExceptionFilter());
@@ -18,7 +23,9 @@ async function bootstrap() {
   );
 
 
-  app.enableCors({ origin: 'http://localhost:3001' });
+  // this allows the browser application (next.js) to read responses from NestJS
+  // credentials: true allows cookies to sent/stored with the browser 
+  app.enableCors({ origin: 'http://localhost:3001', credentials: true });
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
@@ -31,8 +38,8 @@ bootstrap();
 CORS Breakdown:
 
 CORS = Cross-Origin Resource Sharing.
-Browsers enforce a security rule: JavaScript running on one origin (scheme + domain + port — so http://localhost:3001) 
-is not allowed to read responses from a different origin (http://localhost:3000) by default. This protects users — 
+Browsers enforce a security rule: JavaScript running on one origin (scheme + domain + port — so http://localhost:3001, Next.js) 
+is not allowed to read responses from a different origin (http://localhost:3000, NestJS) by default. This protects users — 
 without it, any random website you visit could silently make requests to your bank's API using your logged-in cookies 
 and read the results.
 
